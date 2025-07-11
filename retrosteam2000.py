@@ -19,6 +19,8 @@ from PyQt5.QtWidgets import (
     QFileDialog, QTextEdit, QProgressBar, QMessageBox, QGroupBox, QFormLayout, QStatusBar
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtWidgets import QGraphicsDropShadowEffect
+from PyQt5.QtGui import QColor
 
 # Third-party imports
 try:
@@ -420,20 +422,100 @@ class WorkerThread(QThread):
 class Local2StreamGUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Local2Stream - Music Transfer")
+        self.setWindowTitle("🎵 RetroStream v2.0 - Blast from the Past Edition")
         self.setGeometry(100, 100, 750, 650)
+        self.setObjectName("mainWindow")
         self.init_ui()
         self.spotify_config = None
+        self.apply_retro_stylesheet()
+
+    def apply_retro_stylesheet(self):
+        retro_stylesheet = """
+        QWidget#mainWindow {
+            background-color: #2b2b2b;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+        QGroupBox {
+            border: 2px solid #00ff00;
+            border-radius: 8px;
+            margin-top: 10px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #232323, stop:1 #353535);
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            padding: 0 3px;
+            color: #00ccff;
+            font-weight: bold;
+            font-size: 16px;
+            font-family: 'Courier New', monospace;
+        }
+        QLineEdit {
+            background: #111;
+            color: #00ff00;
+            border: 2px inset #00ccff;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 4px;
+        }
+        QPushButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5a5a5a, stop:1 #2b2b2b);
+            border: 2px solid #4a4a4a;
+            border-radius: 5px;
+            padding: 6px 16px;
+            color: #ff6b00;
+            font-family: 'Courier New', monospace;
+            font-size: 15px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6a6a6a, stop:1 #3b3b3b);
+            border: 2px solid #00ff00;
+            color: #00ff00;
+        }
+        QProgressBar {
+            background: #111;
+            border: 2px solid #00ccff;
+            border-radius: 6px;
+            text-align: center;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+        QProgressBar::chunk {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00ff00, stop:1 #00ccff);
+            border-radius: 4px;
+        }
+        QTextEdit {
+            background: #000;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border: 2px solid #00ccff;
+            border-radius: 6px;
+        }
+        QStatusBar {
+            background: #232323;
+            color: #00ccff;
+            font-family: 'Courier New', monospace;
+            border-top: 2px solid #00ff00;
+        }
+        """
+        self.setStyleSheet(retro_stylesheet)
 
     def init_ui(self):
         main_layout = QVBoxLayout()
 
-        # Music Directory Group
-        dir_group = QGroupBox("Music Directory")
+        # Music Directory Group (Retro Cassette Deck Style)
+        dir_group = QGroupBox("Music Directory (Cassette Deck)")
         dir_layout = QHBoxLayout()
         self.dir_input = QLineEdit()
         self.dir_input.setPlaceholderText("Select your music folder...")
-        self.dir_browse = QPushButton("Browse")
+        # Retro 'LOAD TAPE' button with cassette icon (icon placeholder)
+        self.dir_browse = QPushButton("🟧 LOAD TAPE")
+        # Optionally, set an icon if you have a cassette icon file:
+        # self.dir_browse.setIcon(QIcon('cassette_icon.png'))
         self.dir_browse.clicked.connect(self.browse_directory)
         dir_layout.addWidget(self.dir_input)
         dir_layout.addWidget(self.dir_browse)
@@ -498,7 +580,7 @@ class Local2StreamGUI(QWidget):
             'spotify': {
                 'client_id': client_id,
                 'client_secret': client_secret,
-                'redirect_uri': 'http://localhost:8888/callback'
+                'redirect_uri': 'http://127.0.0.1:8888/callback'
             }
         }
         # Try to authenticate before starting transfer
