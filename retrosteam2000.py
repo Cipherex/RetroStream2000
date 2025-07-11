@@ -5,7 +5,7 @@ Made by Aryan
 """
 
 import sys
-import os
+import os   
 import time
 import re
 import difflib
@@ -20,7 +20,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import QGraphicsDropShadowEffect
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QFontDatabase, QFont, QIcon, QPixmap
+from PyQt5.QtCore import QSize
 
 # Third-party imports
 try:
@@ -422,7 +423,15 @@ class WorkerThread(QThread):
 class Local2StreamGUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("🎵 RetroStream v2.0 - Blast from the Past Edition")
+        # Load and set the VT323 pixel font globally
+        font_id = QFontDatabase.addApplicationFont("fonts/VT323-Regular.ttf")
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        if families:
+            retro_font = QFont(families[0], 13)
+            QApplication.setFont(retro_font)
+        # Set app window icon
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), 'icons', '1.png')))
+        self.setWindowTitle("🎵 RetroStream 2000 - Blast from the Past Edition")
         self.setGeometry(100, 100, 750, 650)
         self.setObjectName("mainWindow")
         self.init_ui()
@@ -434,13 +443,14 @@ class Local2StreamGUI(QWidget):
         QWidget#mainWindow {
             background-color: #2b2b2b;
             color: #00ff00;
-            font-family: 'Courier New', monospace;
+            font-family: 'VT323', 'Courier New', monospace;
         }
         QGroupBox {
             border: 2px solid #00ff00;
             border-radius: 8px;
             margin-top: 10px;
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #232323, stop:1 #353535);
+            font-family: 'VT323', 'Courier New', monospace;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
@@ -448,16 +458,16 @@ class Local2StreamGUI(QWidget):
             padding: 0 3px;
             color: #00ccff;
             font-weight: bold;
-            font-size: 16px;
-            font-family: 'Courier New', monospace;
+            font-size: 20px;
+            font-family: 'VT323', 'Courier New', monospace;
         }
         QLineEdit {
             background: #111;
             color: #00ff00;
             border: 2px inset #00ccff;
             border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 18px;
             padding: 4px;
         }
         QPushButton {
@@ -466,8 +476,8 @@ class Local2StreamGUI(QWidget):
             border-radius: 5px;
             padding: 6px 16px;
             color: #ff6b00;
-            font-family: 'Courier New', monospace;
-            font-size: 15px;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 18px;
             font-weight: bold;
         }
         QPushButton:hover {
@@ -481,7 +491,8 @@ class Local2StreamGUI(QWidget):
             border-radius: 6px;
             text-align: center;
             color: #00ff00;
-            font-family: 'Courier New', monospace;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 18px;
         }
         QProgressBar::chunk {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00ff00, stop:1 #00ccff);
@@ -490,16 +501,17 @@ class Local2StreamGUI(QWidget):
         QTextEdit {
             background: #000;
             color: #00ff00;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 16px;
             border: 2px solid #00ccff;
             border-radius: 6px;
         }
         QStatusBar {
             background: #232323;
             color: #00ccff;
-            font-family: 'Courier New', monospace;
+            font-family: 'VT323', 'Courier New', monospace;
             border-top: 2px solid #00ff00;
+            font-size: 16px;
         }
         """
         self.setStyleSheet(retro_stylesheet)
@@ -507,19 +519,47 @@ class Local2StreamGUI(QWidget):
     def init_ui(self):
         main_layout = QVBoxLayout()
 
+        # Retro logo and Local2Stream title side by side
+        from PyQt5.QtWidgets import QLabel, QHBoxLayout
+        logo_text_layout = QHBoxLayout()
+        logo_label = QLabel()
+        logo_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '1.png'))
+        if not logo_pixmap.isNull():
+            logo_label.setPixmap(logo_pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        text_label = QLabel("<span style='color:#00ccff;font-size:32px;font-family:VT323;'>Local2Stream</span>")
+        text_label.setStyleSheet("padding-left: 12px;")
+        logo_text_layout.addWidget(logo_label)
+        logo_text_layout.addWidget(text_label)
+        logo_text_layout.setAlignment(Qt.AlignCenter)
+        main_layout.addLayout(logo_text_layout)
+        badge_label = QLabel("<span style='color:#ff6b00;font-size:18px;font-family:VT323;'>Made with ❤️ in the 90s</span>")
+        badge_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(badge_label)
+
         # Music Directory Group (Retro Cassette Deck Style)
         dir_group = QGroupBox("Music Directory (Cassette Deck)")
         dir_layout = QHBoxLayout()
         self.dir_input = QLineEdit()
         self.dir_input.setPlaceholderText("Select your music folder...")
-        # Retro 'LOAD TAPE' button with cassette icon (icon placeholder)
-        self.dir_browse = QPushButton("🟧 LOAD TAPE")
-        # Optionally, set an icon if you have a cassette icon file:
-        # self.dir_browse.setIcon(QIcon('cassette_icon.png'))
+        # 'LOAD TAPE' button with 6.png as icon, compact style
+        self.dir_browse = QPushButton("LOAD TAPE")
+        tape_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '6.png')
+        if os.path.exists(tape_icon_path):
+            icon = QIcon(tape_icon_path)
+            self.dir_browse.setIcon(icon)
+            self.dir_browse.setIconSize(QSize(36, 36))
+        self.dir_browse.setFixedHeight(32)
+        self.dir_browse.setFixedWidth(160)
         self.dir_browse.clicked.connect(self.browse_directory)
         dir_layout.addWidget(self.dir_input)
         dir_layout.addWidget(self.dir_browse)
         dir_group.setLayout(dir_layout)
+        # Add icon to group box (decorative label) - now use 5.png
+        dir_icon_label = QLabel()
+        dir_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '5.png'))
+        if not dir_icon_pixmap.isNull():
+            dir_icon_label.setPixmap(dir_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            dir_layout.insertWidget(0, dir_icon_label)
         main_layout.addWidget(dir_group)
 
         # Playlist and Spotify Group
@@ -536,10 +576,23 @@ class Local2StreamGUI(QWidget):
         form_layout.addRow("Spotify Client ID:", self.client_id_input)
         form_layout.addRow("Spotify Client Secret:", self.client_secret_input)
         form_group.setLayout(form_layout)
+        # Add icon to group box (decorative label) - now use 3.png
+        form_icon_label = QLabel()
+        form_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '3.png'))
+        if not form_icon_pixmap.isNull():
+            form_icon_label.setPixmap(form_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            form_layout.insertRow(0, form_icon_label)
         main_layout.addWidget(form_group)
 
-        # Start Transfer Button
+        # Start Transfer Button - use 4.png, compact style
         self.start_button = QPushButton("Start Transfer")
+        start_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '4.png')
+        if os.path.exists(start_icon_path):
+            icon = QIcon(start_icon_path)
+            self.start_button.setIcon(icon)
+            self.start_button.setIconSize(QSize(24, 24))
+        self.start_button.setFixedHeight(32)
+        self.start_button.setFixedWidth(220)
         self.start_button.clicked.connect(self.start_transfer)
         main_layout.addWidget(self.start_button)
 
@@ -549,12 +602,19 @@ class Local2StreamGUI(QWidget):
         self.progress_bar.setTextVisible(True)
         main_layout.addWidget(self.progress_bar)
 
-        # Log Area
+        # Log Area with decorative icon - now use 2.png, increase icon size only
+        log_icon_label = QLabel()
+        log_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '2.png'))
+        if not log_icon_pixmap.isNull():
+            log_icon_label.setPixmap(log_icon_pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        log_layout = QHBoxLayout()
+        log_layout.addWidget(log_icon_label)
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
-        main_layout.addWidget(self.log_area, stretch=1)
+        log_layout.addWidget(self.log_area, stretch=1)
+        main_layout.addLayout(log_layout)
 
-        # Status Bar
+        # Status Bar (remove icon)
         self.status_bar = QStatusBar()
         main_layout.addWidget(self.status_bar)
 
