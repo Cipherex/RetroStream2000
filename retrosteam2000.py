@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout,
     QFileDialog, QTextEdit, QProgressBar, QMessageBox, QGroupBox, QFormLayout, QStatusBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize, QTime
 from PyQt5.QtWidgets import QGraphicsDropShadowEffect
 from PyQt5.QtGui import QColor, QFontDatabase, QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtWidgets import QPlainTextEdit
@@ -434,6 +434,85 @@ class WorkerThread(QThread):
             success_rate = ((found_exact + found_fuzzy + found_title + found_artist) / total_files) * 100
             self.log_signal.emit(f"Success rate: {success_rate:.1f}%")
 
+class RetroStatusBar(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(38)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #181C1A;
+                border-top: 2px solid #7CFC98;
+                border-bottom: 2px solid #7CFC98;
+            }
+        """)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setSpacing(16)
+
+        # Marquee label
+        self.marquee_label = QLabel()
+        self.marquee_label.setStyleSheet("color: #7CFC98; font-family: 'VT323', monospace; font-size: 18px;")
+        self.marquee_label.setFixedHeight(28)
+        self.marquee_text = ""
+        self.marquee_pos = 0
+        self.marquee_timer = QTimer(self)
+        self.marquee_timer.timeout.connect(self.scroll_marquee)
+        self.marquee_timer.start(80)
+        layout.addWidget(self.marquee_label, stretch=2)
+
+        # Digital clock
+        self.clock_label = QLabel()
+        self.clock_label.setStyleSheet("color: #00ccff; font-family: 'VT323', monospace; font-size: 22px; background: #000; border: 2px inset #7CFC98; padding: 2px 12px; border-radius: 6px;")
+        self.clock_label.setFixedWidth(120)
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self.update_clock)
+        self.clock_timer.start(1000)
+        self.update_clock()
+        layout.addWidget(self.clock_label, stretch=0)
+
+        # Error/success message
+        self.message_label = QLabel()
+        self.message_label.setStyleSheet("color: #E8E8E8; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px;")
+        self.message_label.setFixedHeight(28)
+        layout.addWidget(self.message_label, stretch=2)
+
+        self.setLayout(layout)
+
+    def set_marquee(self, text):
+        self.marquee_text = text + "   "
+        self.marquee_pos = 0
+        self.marquee_label.setText(self.marquee_text)
+
+    def scroll_marquee(self):
+        if not self.marquee_text:
+            return
+        display_len = 48
+        text = self.marquee_text
+        if len(text) < display_len:
+            self.marquee_label.setText(text)
+            return
+        pos = self.marquee_pos % len(text)
+        shown = (text + text)[pos:pos+display_len]
+        self.marquee_label.setText(shown)
+        self.marquee_pos += 1
+
+    def update_clock(self):
+        self.clock_label.setText(QTime.currentTime().toString('hh:mm:ss'))
+
+    def show_message(self, text, kind=None, duration=5000):
+        # kind: 'error', 'success', None
+        if kind == 'error':
+            self.message_label.setStyleSheet("color: #ff4444; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px; background: #2a0000; border-radius: 4px;")
+            self.message_label.setText(f"❌ {text}")
+        elif kind == 'success':
+            self.message_label.setStyleSheet("color: #7CFC98; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px; background: #003a00; border-radius: 4px;")
+            self.message_label.setText(f"✅ {text}")
+        else:
+            self.message_label.setStyleSheet("color: #E8E8E8; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px;")
+            self.message_label.setText(text)
+        if duration > 0:
+            QTimer.singleShot(duration, lambda: self.message_label.setText(""))
+
 class Local2StreamGUI(QWidget):
     def __init__(self):
         super().__init__()
@@ -451,6 +530,8 @@ class Local2StreamGUI(QWidget):
         self.init_ui()
         self.spotify_config = None
         self.apply_retro_stylesheet()
+        # Always open maximized
+        self.showMaximized()
 
     def apply_retro_stylesheet(self):
         # Lively retro palette: brighter green, lighter gray, energetic but classic
@@ -591,13 +672,11 @@ class Local2StreamGUI(QWidget):
         self.dir_browse.setStyleSheet("padding: 8px 18px;")
         self.start_button.setMinimumWidth(140)
         self.start_button.setStyleSheet("padding: 8px 18px;")
-        # Make Playlist & Spotify Credentials group box and contents compact
+        # Make Playlist & Spotify Credentials group and contents compact
         self.form_group.setObjectName("playlistGroup")
         self.playlist_input.setStyleSheet("font-size: 14px; padding: 3px 6px;")
         self.client_id_input.setStyleSheet("font-size: 14px; padding: 3px 6px;")
         self.client_secret_input.setStyleSheet("font-size: 14px; padding: 3px 6px;")
-        self.form_layout.setVerticalSpacing(4)
-        self.form_layout.setHorizontalSpacing(6)
 
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -612,7 +691,7 @@ class Local2StreamGUI(QWidget):
         # Reduce distance between logo and text
         logo_text_layout.addSpacing(6)
         # Add '2000' next to RetroStream, increase its size
-        text_label = QLabel("<span style='color:#00ccff;font-size:36px;font-family:VT323;'>RetroStream <span style='color:#7CFC98;font-size:30px;'>2000</span></span>")
+        text_label = QLabel("<span style='color:#00ccff;font-size:56px;font-family:VT323;'>RetroStream <span style='color:#7CFC98;font-size:46px;'>2000</span></span>")
         text_label.setStyleSheet("padding-left: 0px;")
         logo_text_layout.addWidget(text_label)
         logo_text_layout.setAlignment(Qt.AlignCenter)
@@ -620,7 +699,7 @@ class Local2StreamGUI(QWidget):
         main_layout.addSpacing(2)  # Small gap after title
 
         # Badge label - just below title, slightly increased size
-        badge_label = QLabel("<span style='color:#ff6b00;font-size:16px;font-family:VT323;'>Made with ❤️ in the 90s</span>")
+        badge_label = QLabel("<span style='color:#ff6b00;font-size:16px;font-family:VT323;'>Made with ❤️ with touch of the 90s</span>")
         badge_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(badge_label)
         main_layout.addSpacing(6)  # Small gap after badge
@@ -655,17 +734,33 @@ class Local2StreamGUI(QWidget):
 
         # Playlist and Spotify Group
         self.form_group = QGroupBox("Playlist & Spotify Credentials")
-        self.form_layout = QFormLayout()
+        self.form_layout = QVBoxLayout()
+        # Playlist Name (full width)
+        playlist_row = QFormLayout()
         self.playlist_input = QLineEdit()
         self.playlist_input.setPlaceholderText("e.g. Local2Stream Collection")
+        playlist_row.addRow("Playlist Name:", self.playlist_input)
+        self.form_layout.addLayout(playlist_row)
+        # Client ID and Secret side by side, left and right
+        creds_row = QHBoxLayout()
         self.client_id_input = QLineEdit()
         self.client_id_input.setPlaceholderText("Your Spotify Client ID")
+        self.client_id_input.setMinimumWidth(480)
+        self.client_id_input.setMaximumWidth(750)
         self.client_secret_input = QLineEdit()
         self.client_secret_input.setPlaceholderText("Your Spotify Client Secret")
         self.client_secret_input.setEchoMode(QLineEdit.Password)
-        self.form_layout.addRow("Playlist Name:", self.playlist_input)
-        self.form_layout.addRow("Spotify Client ID:", self.client_id_input)
-        self.form_layout.addRow("Spotify Client Secret:", self.client_secret_input)
+        self.client_secret_input.setMinimumWidth(480)
+        self.client_secret_input.setMaximumWidth(750)
+        # Left side: Spotify Client ID
+        creds_row.addWidget(QLabel("Spotify Client ID:"))
+        creds_row.addWidget(self.client_id_input)
+        # Stretch in the middle
+        creds_row.addStretch(1)
+        # Right side: Spotify Client Secret
+        creds_row.addWidget(QLabel("Spotify Client Secret:"))
+        creds_row.addWidget(self.client_secret_input)
+        self.form_layout.addLayout(creds_row)
         self.form_group.setLayout(self.form_layout)
         main_layout.addWidget(self.form_group)
         # Add minimal spacing after Playlist & Spotify Credentials
@@ -685,7 +780,7 @@ class Local2StreamGUI(QWidget):
         button_layout.addWidget(self.start_button)
         # Add Stop Transfer button on the right
         self.stop_button = QPushButton("Stop Transfer")
-        stop_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '2.png')
+        stop_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '7.png')
         if os.path.exists(stop_icon_path):
             stop_icon = QIcon(stop_icon_path)
             self.stop_button.setIcon(stop_icon)
@@ -722,7 +817,7 @@ class Local2StreamGUI(QWidget):
         main_layout.addLayout(log_layout)
 
         # Status Bar (remove icon)
-        self.status_bar = QStatusBar()
+        self.status_bar = RetroStatusBar()
         main_layout.addWidget(self.status_bar)
 
         self.setLayout(main_layout)
@@ -751,15 +846,16 @@ class Local2StreamGUI(QWidget):
             }
         }
         handler = SpotifyHandler(config['spotify'])
-        self.status_bar.showMessage("Authenticating with Spotify...", 2000)
+        self.status_bar.set_marquee("Authenticating with Spotify...")
         QApplication.setOverrideCursor(Qt.WaitCursor)
         result = handler.authenticate()
         QApplication.restoreOverrideCursor()
         if not result:
-            self.status_bar.showMessage("❌ Spotify authentication failed.", 5000)
+            self.status_bar.show_message("Spotify authentication failed.", kind='error', duration=7000)
             QMessageBox.critical(self, "Spotify Authentication Failed", "Could not authenticate with Spotify. Please check your credentials.")
             return
-        self.status_bar.showMessage("✅ Spotify authenticated! Starting transfer...", 2000)
+        self.status_bar.set_marquee("Spotify authenticated! Starting transfer...")
+        self.status_bar.show_message("Spotify authenticated!", kind='success', duration=2000)
         self.log_area.clear()
         self.progress_bar.setValue(0)
         self.start_button.setEnabled(False)
@@ -776,7 +872,8 @@ class Local2StreamGUI(QWidget):
         if hasattr(self, 'worker') and self.worker.isRunning():
             self.worker.stop_requested = True
             self.stop_button.setEnabled(False)
-            self.status_bar.showMessage("Stopping transfer...", 2000)
+            self.status_bar.set_marquee("Stopping transfer...")
+            self.status_bar.show_message("Stopping transfer...", kind=None, duration=2000)
 
     def append_log(self, message):
         self.log_area.append(message)
@@ -787,10 +884,11 @@ class Local2StreamGUI(QWidget):
     def transfer_finished(self):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
-        self.status_bar.showMessage("Transfer complete!", 5000)
+        self.status_bar.set_marquee("Transfer complete!")
+        self.status_bar.show_message("Transfer complete!", kind='success', duration=5000)
 
     def show_error(self, message):
-        self.status_bar.showMessage("Error: " + message, 10000)
+        self.status_bar.show_message(message, kind='error', duration=10000)
         QMessageBox.critical(self, "Error", message)
         self.start_button.setEnabled(True)
 
@@ -849,8 +947,7 @@ class DOSTerminal(QPlainTextEdit):
         self.setup_ascii_header()
         
     def setup_ascii_header(self):
-        ascii_art = """
-╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+        ascii_art = """╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
 ║ ██████╗ ███████╗████████╗██████╗  ██████╗ ███████╗████████╗██████╗ ███████╗ █████╗ ███╗   ███╗██████╗  ██████╗  ██████╗  ██████╗ ║
 ║ ██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔════╝██╔══██╗████╗ ████║╚════██╗██╔═████╗██╔═████╗██╔═████╗ ║
 ║ ██████╔╝█████╗     ██║   ██████╔╝██║  ██║███████╗   ██║   ██████╔╝█████╗  ███████║██╔████╔██║ █████╔╝██║██╔██║██║██╔██║██║██╔██║ ║
@@ -860,12 +957,9 @@ class DOSTerminal(QPlainTextEdit):
 ║                                          RETROSTREAM2000 - DOS TERMINAL      ╔═══════════════════════════════════════════════════╝
 ║                                                                              ║
 ║  C:\\> RETROSTREAM.EXE /MUSIC_TRANSFER /PLATFORM=SPOTIFY                      ║
-║  Loading music collection...                                                 ║
-║  Scanning directories...                                                     ║
 ║  Initializing fuzzy matching algorithms...                                   ║
 ║  Ready for transfer sequence...                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-"""
+╚══════════════════════════════════════════════════════════════════════════════╝"""
         self.appendPlainText(ascii_art)
         
     def toggle_cursor(self):
