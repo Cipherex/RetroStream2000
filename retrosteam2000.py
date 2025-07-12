@@ -18,9 +18,9 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout,
     QFileDialog, QTextEdit, QProgressBar, QMessageBox, QGroupBox, QFormLayout, QStatusBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QGraphicsDropShadowEffect
-from PyQt5.QtGui import QColor, QFontDatabase, QFont, QIcon, QPixmap
+from PyQt5.QtGui import QColor, QFontDatabase, QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtCore import QSize
 
 # Third-party imports
@@ -439,82 +439,153 @@ class Local2StreamGUI(QWidget):
         self.apply_retro_stylesheet()
 
     def apply_retro_stylesheet(self):
+        # Lively retro palette: brighter green, lighter gray, energetic but classic
         retro_stylesheet = """
         QWidget#mainWindow {
-            background-color: #2b2b2b;
-            color: #00ff00;
+            background-color: #202624;
+            color: #E8E8E8;
             font-family: 'VT323', 'Courier New', monospace;
+            border: 1px solid #7CFC98;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                #202624 0px,
+                #202624 2px,
+                #232A26 3px,
+                #202624 4px
+            );
         }
         QGroupBox {
-            border: 2px solid #00ff00;
-            border-radius: 8px;
+            border: 1px solid #7CFC98;
+            border-radius: 5px;
             margin-top: 10px;
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #232323, stop:1 #353535);
+            background: #232A26;
             font-family: 'VT323', 'Courier New', monospace;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
             subcontrol-position: top left;
-            padding: 0 3px;
-            color: #00ccff;
+            padding: 0 8px;
+            color: #7CFC98;
             font-weight: bold;
-            font-size: 20px;
+            font-size: 26px;
             font-family: 'VT323', 'Courier New', monospace;
         }
         QLineEdit {
-            background: #111;
-            color: #00ff00;
-            border: 2px inset #00ccff;
-            border-radius: 4px;
+            background: #181C1A;
+            color: #E8E8E8;
+            border: 1px solid #7CFC98;
+            border-radius: 3px;
             font-family: 'VT323', 'Courier New', monospace;
-            font-size: 18px;
-            padding: 4px;
+            font-size: 16px;
+            padding: 6px 10px;
+        }
+        QGroupBox#playlistGroup QLineEdit, QGroupBox#playlistGroup QLabel {
+            font-size: 14px;
+            padding: 3px 6px;
+        }
+        QGroupBox#playlistGroup {
+            font-size: 15px;
         }
         QPushButton {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5a5a5a, stop:1 #2b2b2b);
-            border: 2px solid #4a4a4a;
-            border-radius: 5px;
-            padding: 6px 16px;
-            color: #ff6b00;
+            background: #202624;
+            border: 1px solid #7CFC98;
+            border-radius: 4px;
+            min-width: 120px;
+            padding: 8px 18px;
+            color: #E8E8E8;
             font-family: 'VT323', 'Courier New', monospace;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
         }
         QPushButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6a6a6a, stop:1 #3b3b3b);
-            border: 2px solid #00ff00;
-            color: #00ff00;
+            background: #232A26;
+            border: 1px solid #7CFC98;
+            color: #fff;
         }
         QProgressBar {
-            background: #111;
-            border: 2px solid #00ccff;
-            border-radius: 6px;
+            background: #181C1A;
+            border: 1px solid #7CFC98;
+            border-radius: 4px;
             text-align: center;
-            color: #00ff00;
+            color: #E8E8E8;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 16px;
+        }
+        QProgressBar::chunk {
+            background: #7CFC98;
+            border-radius: 2px;
+        }
+        QTextEdit {
+            background: #181C1A;
+            color: #E8E8E8;
+            font-family: 'VT323', 'Courier New', monospace;
+            font-size: 16px;
+            border: 1px solid #7CFC98;
+            border-radius: 4px;
+            padding: 8px 10px;
+        }
+        QScrollBar:vertical {
+            background: #232A26;
+            width: 14px;
+            margin: 0px 0px 0px 0px;
+        }
+        QScrollBar::handle:vertical {
+            background: #7CFC98;
+            min-height: 24px;
+            border-radius: 6px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            background: #202624;
+            height: 0px;
+        }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: none;
+        }
+        QScrollBar:horizontal {
+            background: #232A26;
+            height: 14px;
+            margin: 0px 0px 0px 0px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #7CFC98;
+            min-width: 24px;
+            border-radius: 6px;
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            background: #202624;
+            width: 0px;
+        }
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+            background: none;
+        }
+        QStatusBar {
+            background: #202624;
+            color: #E8E8E8;
+            font-family: 'VT323', 'Courier New', monospace;
+            /* border-top: 1px solid #7CFC98; */
+            font-size: 16px;
+            margin-bottom: 0px;
+            padding-bottom: 0px;
+        }
+        QLabel {
+            color: #E8E8E8;
             font-family: 'VT323', 'Courier New', monospace;
             font-size: 18px;
         }
-        QProgressBar::chunk {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00ff00, stop:1 #00ccff);
-            border-radius: 4px;
-        }
-        QTextEdit {
-            background: #000;
-            color: #00ff00;
-            font-family: 'VT323', 'Courier New', monospace;
-            font-size: 16px;
-            border: 2px solid #00ccff;
-            border-radius: 6px;
-        }
-        QStatusBar {
-            background: #232323;
-            color: #00ccff;
-            font-family: 'VT323', 'Courier New', monospace;
-            border-top: 2px solid #00ff00;
-            font-size: 16px;
-        }
         """
         self.setStyleSheet(retro_stylesheet)
+        # Ensure all main buttons are always wide enough
+        self.dir_browse.setMinimumWidth(120)
+        self.dir_browse.setStyleSheet("padding: 8px 18px;")
+        self.start_button.setMinimumWidth(140)
+        self.start_button.setStyleSheet("padding: 8px 18px;")
+        # Make Playlist & Spotify Credentials group box and contents compact
+        self.form_group.setObjectName("playlistGroup")
+        self.playlist_input.setStyleSheet("font-size: 14px; padding: 3px 6px;")
+        self.client_id_input.setStyleSheet("font-size: 14px; padding: 3px 6px;")
+        self.client_secret_input.setStyleSheet("font-size: 14px; padding: 3px 6px;")
+        self.form_layout.setVerticalSpacing(4)
+        self.form_layout.setHorizontalSpacing(6)
 
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -526,13 +597,15 @@ class Local2StreamGUI(QWidget):
         logo_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '1.png'))
         if not logo_pixmap.isNull():
             logo_label.setPixmap(logo_pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        text_label = QLabel("<span style='color:#00ccff;font-size:32px;font-family:VT323;'>Local2Stream</span>")
+        text_label = QLabel("<span style='color:#00ccff;font-size:32px;font-family:VT323;'>RetroStream</span>")
         text_label.setStyleSheet("padding-left: 12px;")
         logo_text_layout.addWidget(logo_label)
         logo_text_layout.addWidget(text_label)
         logo_text_layout.setAlignment(Qt.AlignCenter)
         main_layout.addLayout(logo_text_layout)
-        badge_label = QLabel("<span style='color:#ff6b00;font-size:18px;font-family:VT323;'>Made with ❤️ in the 90s</span>")
+        # Reduce gap before badge even more
+        main_layout.addSpacing(0)
+        badge_label = QLabel("<span style='color:#ff6b00;font-size:14px;font-family:VT323;'>Made with ❤️ in the 90s</span>")
         badge_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(badge_label)
 
@@ -561,10 +634,12 @@ class Local2StreamGUI(QWidget):
             dir_icon_label.setPixmap(dir_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             dir_layout.insertWidget(0, dir_icon_label)
         main_layout.addWidget(dir_group)
+        # Add extra spacing between Music Directory and Playlist/Spotify group
+        main_layout.addSpacing(16)
 
         # Playlist and Spotify Group
-        form_group = QGroupBox("Playlist & Spotify Credentials")
-        form_layout = QFormLayout()
+        self.form_group = QGroupBox("Playlist & Spotify Credentials")
+        self.form_layout = QFormLayout()
         self.playlist_input = QLineEdit()
         self.playlist_input.setPlaceholderText("e.g. Local2Stream Collection")
         self.client_id_input = QLineEdit()
@@ -572,17 +647,13 @@ class Local2StreamGUI(QWidget):
         self.client_secret_input = QLineEdit()
         self.client_secret_input.setPlaceholderText("Your Spotify Client Secret")
         self.client_secret_input.setEchoMode(QLineEdit.Password)
-        form_layout.addRow("Playlist Name:", self.playlist_input)
-        form_layout.addRow("Spotify Client ID:", self.client_id_input)
-        form_layout.addRow("Spotify Client Secret:", self.client_secret_input)
-        form_group.setLayout(form_layout)
-        # Add icon to group box (decorative label) - now use 3.png
-        form_icon_label = QLabel()
-        form_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '3.png'))
-        if not form_icon_pixmap.isNull():
-            form_icon_label.setPixmap(form_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            form_layout.insertRow(0, form_icon_label)
-        main_layout.addWidget(form_group)
+        self.form_layout.addRow("Playlist Name:", self.playlist_input)
+        self.form_layout.addRow("Spotify Client ID:", self.client_id_input)
+        self.form_layout.addRow("Spotify Client Secret:", self.client_secret_input)
+        self.form_group.setLayout(self.form_layout)
+        main_layout.addWidget(self.form_group)
+        # Add minimal spacing after Playlist & Spotify Credentials
+        main_layout.addSpacing(6)
 
         # Start Transfer Button - use 4.png, compact style
         self.start_button = QPushButton("Start Transfer")
@@ -595,16 +666,22 @@ class Local2StreamGUI(QWidget):
         self.start_button.setFixedWidth(220)
         self.start_button.clicked.connect(self.start_transfer)
         main_layout.addWidget(self.start_button)
+        # Add minimal spacing after Start Transfer
+        main_layout.addSpacing(6)
 
-        # Progress Bar
-        self.progress_bar = QProgressBar()
+        # Progress Bar with 2.png icon just after the percentage text
+        progress_layout = QHBoxLayout()
+        self.progress_bar = IconProgressBar()
         self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(True)
-        main_layout.addWidget(self.progress_bar)
+        self.progress_bar.setTextVisible(False)
+        progress_layout.addWidget(self.progress_bar)
+        main_layout.addLayout(progress_layout)
+        # Add minimal spacing after Progress Bar
+        main_layout.addSpacing(6)
 
-        # Log Area with decorative icon - now use 2.png, increase icon size only
+        # Log Area with decorative icon - now use 3.png, increase icon size only
         log_icon_label = QLabel()
-        log_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '2.png'))
+        log_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '3.png'))
         if not log_icon_pixmap.isNull():
             log_icon_label.setPixmap(log_icon_pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         log_layout = QHBoxLayout()
@@ -679,6 +756,35 @@ class Local2StreamGUI(QWidget):
         self.status_bar.showMessage("Error: " + message, 10000)
         QMessageBox.critical(self, "Error", message)
         self.start_button.setEnabled(True)
+
+class IconProgressBar(QProgressBar):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.icon = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '2.png'))
+        self.icon_size = 24  # px (smaller, fits progress bar)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        rect = self.rect()
+        percent = int(self.value() / self.maximum() * 100) if self.maximum() else 0
+        text = f"{percent}%"
+        font = self.font()
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        text_width = metrics.width(text)
+        text_height = metrics.height()
+        # Center text and icon vertically in the bar
+        x = (rect.width() - text_width - self.icon_size - 4) // 2
+        y = rect.y() + (rect.height() + text_height) // 2 - metrics.descent()
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        painter.drawText(x, y, text)
+        # Draw icon to the right of the text (static)
+        if not self.icon.isNull():
+            icon_y = rect.y() + (rect.height() - self.icon_size) // 2 + 3
+            icon_x = x + text_width + 4
+            painter.drawPixmap(icon_x, icon_y, self.icon.scaled(self.icon_size, self.icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        painter.end()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
