@@ -18,10 +18,10 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout,
     QFileDialog, QTextEdit, QProgressBar, QMessageBox, QGroupBox, QFormLayout, QStatusBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
 from PyQt5.QtWidgets import QGraphicsDropShadowEffect
 from PyQt5.QtGui import QColor, QFontDatabase, QFont, QIcon, QPixmap, QPainter, QTransform
-from PyQt5.QtCore import QSize
+from PyQt5.QtWidgets import QPlainTextEdit
 
 # Third-party imports
 try:
@@ -30,9 +30,10 @@ try:
     from mutagen.mp3 import MP3
     from mutagen.flac import FLAC
     from mutagen.mp4 import MP4
-    from mutagen.id3 import ID3NoHeaderError
+    from mutagen.id3._util import ID3NoHeaderError
 except ImportError as e:
-    QMessageBox.critical(None, "Missing Package", f"Missing required package: {e}\n\nPlease run:\npip install spotipy mutagen PyQt5")
+    print(f"Missing required package: {e}")
+    print("Please run: pip install spotipy mutagen PyQt5")
     sys.exit(1)
 
 @dataclass
@@ -74,9 +75,9 @@ class AudioMetadataExtractor:
     def _extract_mp3_metadata(file_path: str) -> Optional[TrackMetadata]:
         try:
             audio = MP3(file_path)
-            title = str(audio.get('TIT2', [''])[0])
-            artist = str(audio.get('TPE1', [''])[0])
-            album = str(audio.get('TALB', [''])[0])
+            title = str(audio.get('TIT2', [''])[0]) if audio.get('TIT2') else ''
+            artist = str(audio.get('TPE1', [''])[0]) if audio.get('TPE1') else ''
+            album = str(audio.get('TALB', [''])[0]) if audio.get('TALB') else ''
             duration = int(audio.info.length) if audio.info else None
             return TrackMetadata(
                 title=title or AudioMetadataExtractor._get_title_from_filename(file_path),
@@ -92,9 +93,9 @@ class AudioMetadataExtractor:
     def _extract_flac_metadata(file_path: str) -> Optional[TrackMetadata]:
         try:
             audio = FLAC(file_path)
-            title = audio.get('TITLE', [''])[0]
-            artist = audio.get('ARTIST', [''])[0]
-            album = audio.get('ALBUM', [''])[0]
+            title = audio.get('TITLE', [''])[0] if audio.get('TITLE') else ''
+            artist = audio.get('ARTIST', [''])[0] if audio.get('ARTIST') else ''
+            album = audio.get('ALBUM', [''])[0] if audio.get('ALBUM') else ''
             duration = int(audio.info.length) if audio.info else None
             return TrackMetadata(
                 title=title or AudioMetadataExtractor._get_title_from_filename(file_path),
@@ -110,9 +111,9 @@ class AudioMetadataExtractor:
     def _extract_mp4_metadata(file_path: str) -> Optional[TrackMetadata]:
         try:
             audio = MP4(file_path)
-            title = audio.get('\xa9nam', [''])[0]
-            artist = audio.get('\xa9ART', [''])[0]
-            album = audio.get('\xa9alb', [''])[0]
+            title = audio.get('\xa9nam', [''])[0] if audio.get('\xa9nam') else ''
+            artist = audio.get('\xa9ART', [''])[0] if audio.get('\xa9ART') else ''
+            album = audio.get('\xa9alb', [''])[0] if audio.get('\xa9alb') else ''
             duration = int(audio.info.length) if audio.info else None
             return TrackMetadata(
                 title=title or AudioMetadataExtractor._get_title_from_filename(file_path),
@@ -211,7 +212,7 @@ class SpotifyHandler:
             else:
                 query = f'track:"{title}"'
             results = self.sp.search(q=query, type='track', limit=50)
-            if results['tracks']['items']:
+            if results and results.get('tracks') and results['tracks'].get('items'):
                 # Exact match
                 for track in results['tracks']['items']:
                     track_title = self.clean_string(track['name'])
@@ -251,7 +252,7 @@ class SpotifyHandler:
                     )
             # 2. Search by title only (no artist)
             title_only_results = self.sp.search(q=f'track:"{title}"', type='track', limit=50)
-            if title_only_results['tracks']['items']:
+            if title_only_results and title_only_results.get('tracks') and title_only_results['tracks'].get('items'):
                 best_match = None
                 best_score = 0
                 for track in title_only_results['tracks']['items']:
@@ -272,7 +273,7 @@ class SpotifyHandler:
             # 3. Search by artist only, fuzzy match title
             if artist:
                 artist_results = self.sp.search(q=f'artist:"{artist}"', type='track', limit=50)
-                if artist_results['tracks']['items']:
+                if artist_results and artist_results.get('tracks') and artist_results['tracks'].get('items'):
                     best_match = None
                     best_score = 0
                     for track in artist_results['tracks']['items']:
@@ -296,19 +297,28 @@ class SpotifyHandler:
 
     def create_playlist(self, name: str, description: str = "") -> Optional[str]:
         try:
-            user_id = self.sp.me()['id']
+            if not self.sp:
+                return None
+            user_info = self.sp.me()
+            if not user_info:
+                return None
+            user_id = user_info.get('id')
+            if not user_id:
+                return None
             playlist = self.sp.user_playlist_create(
                 user=user_id,
                 name=name,
                 public=False,
                 description=description
             )
-            return playlist['id']
+            return playlist.get('id') if playlist else None
         except Exception:
             return None
 
     def add_tracks_to_playlist(self, playlist_id: str, track_ids: List[str]) -> bool:
         try:
+            if not self.sp:
+                return False
             track_uris = [f"spotify:track:{track_id}" for track_id in track_ids]
             batch_size = 100
             for i in range(0, len(track_uris), batch_size):
@@ -706,7 +716,7 @@ class Local2StreamGUI(QWidget):
             log_icon_label.setPixmap(log_icon_pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         log_layout = QHBoxLayout()
         log_layout.addWidget(log_icon_label)
-        self.log_area = QTextEdit()
+        self.log_area = DOSTerminal()
         self.log_area.setReadOnly(True)
         log_layout.addWidget(self.log_area, stretch=1)
         main_layout.addLayout(log_layout)
@@ -760,7 +770,6 @@ class Local2StreamGUI(QWidget):
         self.worker.finished_signal.connect(self.transfer_finished)
         self.worker.error_signal.connect(self.show_error)
         self.worker.stop_requested = False
-        self.worker.stop_transfer_signal = self.stop_transfer
         self.worker.start()
 
     def stop_transfer(self):
@@ -779,7 +788,6 @@ class Local2StreamGUI(QWidget):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.status_bar.showMessage("Transfer complete!", 5000)
-        QMessageBox.information(self, "Done", "Music transfer complete!")
 
     def show_error(self, message):
         self.status_bar.showMessage("Error: " + message, 10000)
@@ -814,6 +822,90 @@ class IconProgressBar(QProgressBar):
             icon_x = x + text_width + 4
             painter.drawPixmap(icon_x, icon_y, self.icon.scaled(self.icon_size, self.icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         painter.end()
+
+class DOSTerminal(QPlainTextEdit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cursor_visible = True
+        self.cursor_timer = QTimer()
+        self.cursor_timer.timeout.connect(self.toggle_cursor)
+        self.cursor_timer.start(500)  # Blink every 500ms
+        # Set a reliable monospace font
+        font = QFont("Consolas")
+        font.setStyleHint(QFont.Monospace)
+        font.setPointSize(13)
+        self.setFont(font)
+        self.setStyleSheet("""
+            QPlainTextEdit {
+                background-color: #000000;
+                color: #00FF00;
+                border: 2px solid #00FF00;
+                border-radius: 0px;
+                padding: 8px;
+                selection-background-color: #00FF00;
+                selection-color: #000000;
+            }
+        """)
+        self.setup_ascii_header()
+        
+    def setup_ascii_header(self):
+        ascii_art = """
+╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ ██████╗ ███████╗████████╗██████╗  ██████╗ ███████╗████████╗██████╗ ███████╗ █████╗ ███╗   ███╗██████╗  ██████╗  ██████╗  ██████╗ ║
+║ ██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔════╝██╔══██╗████╗ ████║╚════██╗██╔═████╗██╔═████╗██╔═████╗ ║
+║ ██████╔╝█████╗     ██║   ██████╔╝██║  ██║███████╗   ██║   ██████╔╝█████╗  ███████║██╔████╔██║ █████╔╝██║██╔██║██║██╔██║██║██╔██║ ║
+║ ██╔══██╗██╔══╝     ██║   ██╔══██╗██║  ██║╚════██║   ██║   ██╔══██╗██╔══╝  ██╔══██║██║╚██╔╝██║██╔═══╝ ████╔╝██║████╔╝██║████╔╝██║ ║
+║ ██║  ██║███████╗   ██║   ██║  ██║██████╔╝███████║   ██║   ██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗╚██████╔╝╚██████╔╝╚██████╔╝ ║
+║ ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝  ║
+║                                          RETROSTREAM2000 - DOS TERMINAL      ╔═══════════════════════════════════════════════════╝
+║                                                                              ║
+║  C:\\> RETROSTREAM.EXE /MUSIC_TRANSFER /PLATFORM=SPOTIFY                      ║
+║  Loading music collection...                                                 ║
+║  Scanning directories...                                                     ║
+║  Initializing fuzzy matching algorithms...                                   ║
+║  Ready for transfer sequence...                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+        self.appendPlainText(ascii_art)
+        
+    def toggle_cursor(self):
+        self.cursor_visible = not self.cursor_visible
+        self.viewport().update()
+        
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        
+        # Draw scanline overlay
+        painter = QPainter(self.viewport())
+        painter.setPen(QColor(0, 255, 0, 30))  # Semi-transparent green
+        
+        # Draw horizontal scanlines
+        for y in range(0, self.height(), 2):
+            painter.drawLine(0, y, self.width(), y)
+            
+        # Draw blinking cursor at the end (thicker)
+        if self.cursor_visible:
+            cursor_rect = self.cursorRect()
+            painter.setPen(QColor(0, 255, 0))
+            # Draw a 3px wide vertical bar for the cursor
+            for dx in range(3):
+                painter.drawLine(cursor_rect.x() + dx, cursor_rect.y(),
+                                 cursor_rect.x() + dx, cursor_rect.y() + cursor_rect.height())
+        
+        painter.end()
+        
+    def append(self, text):
+        # Preserve emojis while adding DOS-style formatting
+        if text.startswith("✅") or text.startswith("❌") or text.startswith("🔍") or text.startswith("📁") or text.startswith("🎵"):
+            # Keep emojis as they are
+            self.appendPlainText(text)
+        else:
+            # Add DOS prompt for regular messages
+            self.appendPlainText(f"C:\\> {text}")
+        
+        # Auto-scroll to bottom
+        scrollbar = self.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
