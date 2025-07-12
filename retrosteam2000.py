@@ -324,10 +324,11 @@ class WorkerThread(QThread):
     progress_signal = pyqtSignal(int)
     finished_signal = pyqtSignal()
     error_signal = pyqtSignal(str)
-
+    # Add stop_requested flag
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.stop_requested = False
 
     def run(self):
         try:
@@ -374,6 +375,9 @@ class WorkerThread(QThread):
         not_found = 0
 
         for i, file_path in enumerate(music_files):
+            if self.stop_requested:
+                self.log_signal.emit("⏹️ Transfer stopped by user. Only processed tracks will be added to playlist.")
+                break
             self.progress_signal.emit(int((i+1)/total_files*100))
             metadata = AudioMetadataExtractor.extract_metadata(file_path)
             if not metadata:
@@ -499,8 +503,6 @@ class Local2StreamGUI(QWidget):
         }
         QPushButton:hover {
             background: #232A26;
-            border: 1px solid #7CFC98;
-            color: #fff;
         }
         QProgressBar {
             background: #181C1A;
@@ -590,24 +592,28 @@ class Local2StreamGUI(QWidget):
     def init_ui(self):
         main_layout = QVBoxLayout()
 
-        # Retro logo and Local2Stream title side by side
-        from PyQt5.QtWidgets import QLabel, QHBoxLayout
+        # Retro logo and Local2Stream title side by side (move to top)
         logo_text_layout = QHBoxLayout()
         logo_label = QLabel()
         logo_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '1.png'))
         if not logo_pixmap.isNull():
             logo_label.setPixmap(logo_pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        text_label = QLabel("<span style='color:#00ccff;font-size:32px;font-family:VT323;'>RetroStream</span>")
-        text_label.setStyleSheet("padding-left: 12px;")
         logo_text_layout.addWidget(logo_label)
+        # Reduce distance between logo and text
+        logo_text_layout.addSpacing(6)
+        # Add '2000' next to RetroStream, increase its size
+        text_label = QLabel("<span style='color:#00ccff;font-size:36px;font-family:VT323;'>RetroStream <span style='color:#7CFC98;font-size:30px;'>2000</span></span>")
+        text_label.setStyleSheet("padding-left: 0px;")
         logo_text_layout.addWidget(text_label)
         logo_text_layout.setAlignment(Qt.AlignCenter)
         main_layout.addLayout(logo_text_layout)
-        # Reduce gap before badge even more
-        main_layout.addSpacing(0)
-        badge_label = QLabel("<span style='color:#ff6b00;font-size:14px;font-family:VT323;'>Made with ❤️ in the 90s</span>")
+        main_layout.addSpacing(2)  # Small gap after title
+
+        # Badge label - just below title, slightly increased size
+        badge_label = QLabel("<span style='color:#ff6b00;font-size:16px;font-family:VT323;'>Made with ❤️ in the 90s</span>")
         badge_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(badge_label)
+        main_layout.addSpacing(6)  # Small gap after badge
 
         # Music Directory Group (Retro Cassette Deck Style)
         dir_group = QGroupBox("Music Directory (Cassette Deck)")
@@ -655,7 +661,8 @@ class Local2StreamGUI(QWidget):
         # Add minimal spacing after Playlist & Spotify Credentials
         main_layout.addSpacing(6)
 
-        # Start Transfer Button - use 4.png, compact style
+        # Start Transfer and Stop Transfer Buttons - use 4.png, compact style
+        button_layout = QHBoxLayout()
         self.start_button = QPushButton("Start Transfer")
         start_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '4.png')
         if os.path.exists(start_icon_path):
@@ -665,8 +672,21 @@ class Local2StreamGUI(QWidget):
         self.start_button.setFixedHeight(32)
         self.start_button.setFixedWidth(220)
         self.start_button.clicked.connect(self.start_transfer)
-        main_layout.addWidget(self.start_button)
-        # Add minimal spacing after Start Transfer
+        button_layout.addWidget(self.start_button)
+        # Add Stop Transfer button on the right
+        self.stop_button = QPushButton("Stop Transfer")
+        stop_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '2.png')
+        if os.path.exists(stop_icon_path):
+            stop_icon = QIcon(stop_icon_path)
+            self.stop_button.setIcon(stop_icon)
+            self.stop_button.setIconSize(QSize(24, 24))
+        self.stop_button.setFixedHeight(32)
+        self.stop_button.setFixedWidth(220)
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.stop_transfer)
+        button_layout.addWidget(self.stop_button)
+        main_layout.addLayout(button_layout)
+        # Add minimal spacing after Start/Stop Transfer
         main_layout.addSpacing(6)
 
         # Progress Bar with 2.png icon just after the percentage text
@@ -720,7 +740,6 @@ class Local2StreamGUI(QWidget):
                 'redirect_uri': 'http://127.0.0.1:8888/callback'
             }
         }
-        # Try to authenticate before starting transfer
         handler = SpotifyHandler(config['spotify'])
         self.status_bar.showMessage("Authenticating with Spotify...", 2000)
         QApplication.setOverrideCursor(Qt.WaitCursor)
@@ -734,12 +753,21 @@ class Local2StreamGUI(QWidget):
         self.log_area.clear()
         self.progress_bar.setValue(0)
         self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
         self.worker = WorkerThread(config)
         self.worker.log_signal.connect(self.append_log)
         self.worker.progress_signal.connect(self.update_progress)
         self.worker.finished_signal.connect(self.transfer_finished)
         self.worker.error_signal.connect(self.show_error)
+        self.worker.stop_requested = False
+        self.worker.stop_transfer_signal = self.stop_transfer
         self.worker.start()
+
+    def stop_transfer(self):
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.worker.stop_requested = True
+            self.stop_button.setEnabled(False)
+            self.status_bar.showMessage("Stopping transfer...", 2000)
 
     def append_log(self, message):
         self.log_area.append(message)
@@ -749,6 +777,7 @@ class Local2StreamGUI(QWidget):
 
     def transfer_finished(self):
         self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
         self.status_bar.showMessage("Transfer complete!", 5000)
         QMessageBox.information(self, "Done", "Music transfer complete!")
 
