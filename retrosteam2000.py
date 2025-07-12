@@ -18,10 +18,11 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout,
     QFileDialog, QTextEdit, QProgressBar, QMessageBox, QGroupBox, QFormLayout, QStatusBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize, QTime
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize, QTime, QUrl, QRect
 from PyQt5.QtWidgets import QGraphicsDropShadowEffect
 from PyQt5.QtGui import QColor, QFontDatabase, QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtWidgets import QPlainTextEdit
+from PyQt5.QtMultimedia import QSoundEffect
 
 # Third-party imports
 try:
@@ -470,13 +471,17 @@ class RetroStatusBar(QWidget):
         self.update_clock()
         layout.addWidget(self.clock_label, stretch=0)
 
-        # Error/success message
+        # Blinking indicator label (REC/PLAY)
         self.message_label = QLabel()
         self.message_label.setStyleSheet("color: #E8E8E8; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px;")
         self.message_label.setFixedHeight(28)
         layout.addWidget(self.message_label, stretch=2)
-
         self.setLayout(layout)
+
+        self._indicator_mode = None  # 'REC', 'PLAY', or None
+        self._indicator_visible = True
+        self._indicator_timer = QTimer(self)
+        self._indicator_timer.timeout.connect(self._blink_indicator)
 
     def set_marquee(self, text):
         self.marquee_text = text + "   "
@@ -500,18 +505,51 @@ class RetroStatusBar(QWidget):
         self.clock_label.setText(QTime.currentTime().toString('hh:mm:ss'))
 
     def show_message(self, text, kind=None, duration=5000):
-        # kind: 'error', 'success', None
+        # Only update marquee for error/success/complete
         if kind == 'error':
-            self.message_label.setStyleSheet("color: #ff4444; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px; background: #2a0000; border-radius: 4px;")
-            self.message_label.setText(f"❌ {text}")
+            self.set_marquee(f"❌ {text}")
         elif kind == 'success':
-            self.message_label.setStyleSheet("color: #7CFC98; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px; background: #003a00; border-radius: 4px;")
-            self.message_label.setText(f"✅ {text}")
+            self.set_marquee(f"✅ {text}")
         else:
-            self.message_label.setStyleSheet("color: #E8E8E8; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px;")
-            self.message_label.setText(text)
-        if duration > 0:
-            QTimer.singleShot(duration, lambda: self.message_label.setText(""))
+            self.set_marquee(text)
+        # message_label is now only for indicator, not used here
+
+    def set_indicator(self, mode):
+        # mode: 'REC', 'PLAY', or None
+        self._indicator_mode = mode
+        self._indicator_visible = True
+        if mode == 'REC':
+            self.message_label.setStyleSheet("color: #ff4444; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px; font-weight: bold;")
+            self._indicator_timer.start(500)
+        elif mode == 'PLAY':
+            self.message_label.setStyleSheet("color: #7CFC98; font-family: 'VT323', monospace; font-size: 18px; padding-left: 12px; font-weight: bold;")
+            self._indicator_timer.start(700)
+        else:
+            self._indicator_timer.stop()
+            self.message_label.setText("")
+            return
+        self._update_indicator_text()
+
+    def clear_indicator(self):
+        self._indicator_mode = None
+        self._indicator_timer.stop()
+        self.message_label.setText("")
+
+    def _blink_indicator(self):
+        self._indicator_visible = not self._indicator_visible
+        self._update_indicator_text()
+
+    def _update_indicator_text(self):
+        if not self._indicator_mode:
+            self.message_label.setText("")
+            return
+        if self._indicator_visible:
+            if self._indicator_mode == 'REC':
+                self.message_label.setText("● REC")
+            elif self._indicator_mode == 'PLAY':
+                self.message_label.setText("▶ PLAY")
+        else:
+            self.message_label.setText("")
 
 class Local2StreamGUI(QWidget):
     def __init__(self):
@@ -681,6 +719,18 @@ class Local2StreamGUI(QWidget):
             QApplication.setFont(retro_font)
         main_layout = QVBoxLayout()
 
+        # --- SPINNING VINYL/CASSETTE ANIMATION (hidden by default) ---
+        self.spinner_label = QLabel()
+        self.spinner_label.setAlignment(Qt.AlignCenter if hasattr(Qt, 'AlignCenter') else 0x0004)
+        self.spinner_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '5.png'))
+        self.spinner_angle = 0
+        self.spinner_timer = QTimer(self)
+        self.spinner_timer.timeout.connect(self.rotate_spinner)
+        if not self.spinner_pixmap.isNull():
+            self.spinner_label.setPixmap(self.spinner_pixmap.scaled(64, 64, getattr(Qt, 'KeepAspectRatio', 0x01), getattr(Qt, 'SmoothTransformation', 0x01)))
+        self.spinner_label.setVisible(False)
+        main_layout.addWidget(self.spinner_label)
+
         # Retro logo and Local2Stream title side by side (move to top)
         logo_text_layout = QHBoxLayout()
         logo_label = QLabel()
@@ -725,12 +775,24 @@ class Local2StreamGUI(QWidget):
         main_layout.addLayout(logo_text_layout)
         main_layout.addSpacing(2)  # Small gap after title
 
-        # --- RETRO TAGLINE (PLAIN TEXT, VT323 FONT) ---
-        badge_label = QLabel("Made with  with touch of the 90s")
-        badge_label.setAlignment(Qt.AlignCenter)
+        # --- RETRO TAGLINE (ICON + TEXT + EMOJI, VT323 FONT) ---
+        badge_layout = QHBoxLayout()
+        badge_layout.addStretch(1)  # Left stretch for centering
+        # Add 3.png icon before the badge label
+        badge_icon_label = QLabel()
+        badge_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '3.png'))
+        if not badge_icon_pixmap.isNull():
+            badge_icon_label.setPixmap(badge_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        badge_layout.addWidget(badge_icon_label)
+        # Add spacing between icon and text
+        badge_layout.addSpacing(8)
+        badge_label = QLabel("Made with ❤️ with touch of the 90s")
         badge_label.setFont(QFont(families[0], 18) if families else QFont("Courier New", 18))
         badge_label.setStyleSheet("color:#ff6b00;font-family:'VT323',monospace;")
-        main_layout.addWidget(badge_label)
+        badge_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        badge_layout.addWidget(badge_label)
+        badge_layout.addStretch(1)  # Right stretch for centering
+        main_layout.addLayout(badge_layout)
         main_layout.addSpacing(6)  # Small gap after badge
 
         # Music Directory Group (Retro Cassette Deck Style)
@@ -752,11 +814,14 @@ class Local2StreamGUI(QWidget):
         dir_layout.addWidget(self.dir_browse)
         dir_group.setLayout(dir_layout)
         # Add icon to group box (decorative label) - now use 5.png
-        dir_icon_label = QLabel()
-        dir_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '5.png'))
-        if not dir_icon_pixmap.isNull():
-            dir_icon_label.setPixmap(dir_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            dir_layout.insertWidget(0, dir_icon_label)
+        self.dir_icon_label = QLabel()
+        self.dir_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '5.png'))
+        self.dir_icon_angle = 0
+        self.dir_icon_timer = QTimer(self)
+        self.dir_icon_timer.timeout.connect(self.rotate_dir_icon)
+        if not self.dir_icon_pixmap.isNull():
+            self.dir_icon_label.setPixmap(self.dir_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            dir_layout.insertWidget(0, self.dir_icon_label)
         main_layout.addWidget(dir_group)
         # Add extra spacing between Music Directory and Playlist/Spotify group
         main_layout.addSpacing(16)
@@ -809,7 +874,7 @@ class Local2StreamGUI(QWidget):
         button_layout.addWidget(self.start_button)
         # Add Stop Transfer button on the right
         self.stop_button = QPushButton("Stop Transfer")
-        stop_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '7.png')
+        stop_icon_path = os.path.join(os.path.dirname(__file__), 'icons', '2.png')
         if os.path.exists(stop_icon_path):
             stop_icon = QIcon(stop_icon_path)
             self.stop_button.setIcon(stop_icon)
@@ -825,21 +890,15 @@ class Local2StreamGUI(QWidget):
 
         # Progress Bar with 2.png icon just after the percentage text
         progress_layout = QHBoxLayout()
-        self.progress_bar = IconProgressBar()
+        self.progress_bar = RetroVUMeter()
         self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(False)
         progress_layout.addWidget(self.progress_bar)
         main_layout.addLayout(progress_layout)
         # Add minimal spacing after Progress Bar
         main_layout.addSpacing(6)
 
-        # Log Area with decorative icon - now use 3.png, increase icon size only
-        log_icon_label = QLabel()
-        log_icon_pixmap = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '3.png'))
-        if not log_icon_pixmap.isNull():
-            log_icon_label.setPixmap(log_icon_pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        # Log Area (remove 3.png icon from here)
         log_layout = QHBoxLayout()
-        log_layout.addWidget(log_icon_label)
         self.log_area = DOSTerminal()
         self.log_area.setReadOnly(True)
         log_layout.addWidget(self.log_area, stretch=1)
@@ -855,6 +914,43 @@ class Local2StreamGUI(QWidget):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Music Directory")
         if dir_path:
             self.dir_input.setText(dir_path)
+
+    def rotate_spinner(self):
+        if self.spinner_pixmap.isNull():
+            return
+        self.spinner_angle = (self.spinner_angle + 15) % 360
+        transform = QTransform().rotate(self.spinner_angle)
+        rotated = self.spinner_pixmap.transformed(transform, getattr(Qt, 'SmoothTransformation', 0x01))
+        self.spinner_label.setPixmap(rotated.scaled(64, 64, getattr(Qt, 'KeepAspectRatio', 0x01), getattr(Qt, 'SmoothTransformation', 0x01)))
+
+    def start_spinner(self):
+        self.spinner_label.setVisible(True)
+        self.spinner_angle = 0
+        self.spinner_timer.start(40)
+        self.rotate_spinner()
+
+    def stop_spinner(self):
+        self.spinner_timer.stop()
+        self.spinner_label.setVisible(False)
+
+    def rotate_dir_icon(self):
+        if self.dir_icon_pixmap.isNull():
+            return
+        self.dir_icon_angle = (self.dir_icon_angle + 15) % 360
+        transform = QTransform().rotate(self.dir_icon_angle)
+        rotated = self.dir_icon_pixmap.transformed(transform, Qt.SmoothTransformation)
+        self.dir_icon_label.setPixmap(rotated.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def start_dir_icon_spin(self):
+        self.dir_icon_angle = 0
+        self.dir_icon_timer.start(40)
+        self.rotate_dir_icon()
+
+    def stop_dir_icon_spin(self):
+        self.dir_icon_timer.stop()
+        # Reset to original
+        if not self.dir_icon_pixmap.isNull():
+            self.dir_icon_label.setPixmap(self.dir_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def start_transfer(self):
         music_dir = self.dir_input.text().strip()
@@ -885,10 +981,12 @@ class Local2StreamGUI(QWidget):
             return
         self.status_bar.set_marquee("Spotify authenticated! Starting transfer...")
         self.status_bar.show_message("Spotify authenticated!", kind='success', duration=2000)
+        self.status_bar.set_indicator('REC')
         self.log_area.clear()
         self.progress_bar.setValue(0)
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
+        self.start_dir_icon_spin()  # Start spinning cassette
         self.worker = WorkerThread(config)
         self.worker.log_signal.connect(self.append_log)
         self.worker.progress_signal.connect(self.update_progress)
@@ -902,7 +1000,8 @@ class Local2StreamGUI(QWidget):
             self.worker.stop_requested = True
             self.stop_button.setEnabled(False)
             self.status_bar.set_marquee("Stopping transfer...")
-            self.status_bar.show_message("Stopping transfer...", kind=None, duration=2000)
+            self.status_bar.clear_indicator()
+            self.stop_dir_icon_spin()  # Stop spinning cassette
 
     def append_log(self, message):
         self.log_area.append(message)
@@ -915,39 +1014,84 @@ class Local2StreamGUI(QWidget):
         self.stop_button.setEnabled(False)
         self.status_bar.set_marquee("Transfer complete!")
         self.status_bar.show_message("Transfer complete!", kind='success', duration=5000)
+        self.status_bar.set_indicator('PLAY')
+        self.stop_dir_icon_spin()  # Stop spinning cassette
 
     def show_error(self, message):
         self.status_bar.show_message(message, kind='error', duration=10000)
+        self.status_bar.set_indicator('PLAY')
         QMessageBox.critical(self, "Error", message)
         self.start_button.setEnabled(True)
+        self.stop_dir_icon_spin()  # Stop spinning cassette
 
-class IconProgressBar(QProgressBar):
+class RetroVUMeter(QProgressBar):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.icon = QPixmap(os.path.join(os.path.dirname(__file__), 'icons', '2.png'))
-        self.icon_size = 24  # px (smaller, fits progress bar)
+        self.setMinimum(0)
+        self.setMaximum(100)
+        self.setTextVisible(False)
+        self.led_count = 16  # Number of LED bars
+        self.led_levels = [0] * self.led_count
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.animate)
+        self.timer.start(80)
+        self.target_level = 0
+        self.last_value = 0
+
+    def setValue(self, value):
+        super().setValue(value)
+        self.target_level = int((value / 100) * self.led_count)
+        self.last_value = value
+        self.update()
+
+    def animate(self):
+        # Animate the LED bars to bounce up/down toward the target level
+        for i in range(self.led_count):
+            if i < self.target_level:
+                # Add some random bounce for retro effect
+                self.led_levels[i] = min(self.led_levels[i] + (1 if self.led_levels[i] < 8 else 0), 8)
+            else:
+                self.led_levels[i] = max(self.led_levels[i] - 1, 0)
+        self.update()
 
     def paintEvent(self, event):
-        super().paintEvent(event)
         painter = QPainter(self)
         rect = self.rect()
-        percent = int(self.value() / self.maximum() * 100) if self.maximum() else 0
+        bar_width = rect.width() // self.led_count
+        led_height = rect.height() // 9
+        margin = 4
+        for i in range(self.led_count):
+            for j in range(8):
+                led_rect = QRect(
+                    rect.x() + i * bar_width + margin // 2,
+                    rect.bottom() - (j + 1) * led_height - margin,
+                    bar_width - margin,
+                    led_height - 2
+                )
+                if j < self.led_levels[i]:
+                
+                    # All LEDs are high-contrast bright green
+                    color = QColor('#00FF00')
+                    painter.setBrush(color)
+                    painter.setPen(QColor('#222'))
+                else:
+                    painter.setBrush(QColor('#222'))
+                    painter.setPen(QColor('#111'))
+                painter.drawRect(led_rect)
+        # Draw retro border
+        painter.setPen(QColor('#7CFC98'))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(rect.adjusted(0, 0, -1, -1))
+        # Draw percentage text in VT323 font
+        percent = int(self.value())
         text = f"{percent}%"
-        font = self.font()
+        font = QFont("VT323", 18, QFont.Bold)
         painter.setFont(font)
         metrics = painter.fontMetrics()
         text_width = metrics.width(text)
         text_height = metrics.height()
-        # Center text and icon vertically in the bar
-        x = (rect.width() - text_width - self.icon_size - 4) // 2
-        y = rect.y() + (rect.height() + text_height) // 2 - metrics.descent()
-        painter.setPen(self.palette().color(self.foregroundRole()))
-        painter.drawText(x, y, text)
-        # Draw icon to the right of the text (static)
-        if not self.icon.isNull():
-            icon_y = rect.y() + (rect.height() - self.icon_size) // 2 + 3
-            icon_x = x + text_width + 4
-            painter.drawPixmap(icon_x, icon_y, self.icon.scaled(self.icon_size, self.icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        painter.setPen(QColor('#7CFC98'))
+        painter.drawText((rect.width() - text_width) // 2, (rect.height() + text_height) // 2 - 6, text)
         painter.end()
 
 class DOSTerminal(QPlainTextEdit):
