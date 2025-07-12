@@ -1,0 +1,9 @@
+# RetroStream 2000 - Requirements
+# Core GUI Framework
+PyQt5>=5.15.0
+
+# Spotify Integration
+spotipy>=2.22.1
+
+# Audio Metadata Extraction
+mutagen>=1.46.0

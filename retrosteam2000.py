@@ -516,12 +516,6 @@ class RetroStatusBar(QWidget):
 class Local2StreamGUI(QWidget):
     def __init__(self):
         super().__init__()
-        # Load and set the VT323 pixel font globally
-        font_id = QFontDatabase.addApplicationFont("fonts/VT323-Regular.ttf")
-        families = QFontDatabase.applicationFontFamilies(font_id)
-        if families:
-            retro_font = QFont(families[0], 13)
-            QApplication.setFont(retro_font)
         # Set app window icon
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), 'icons', '1.png')))
         self.setWindowTitle("🎵 RetroStream 2000 - Blast from the Past Edition")
@@ -679,6 +673,12 @@ class Local2StreamGUI(QWidget):
         self.client_secret_input.setStyleSheet("font-size: 14px; padding: 3px 6px;")
 
     def init_ui(self):
+        # Load and set the VT323 pixel font globally
+        font_id = QFontDatabase.addApplicationFont("fonts/VT323-Regular.ttf")
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        if families:
+            retro_font = QFont(families[0], 13)
+            QApplication.setFont(retro_font)
         main_layout = QVBoxLayout()
 
         # Retro logo and Local2Stream title side by side (move to top)
@@ -690,17 +690,46 @@ class Local2StreamGUI(QWidget):
         logo_text_layout.addWidget(logo_label)
         # Reduce distance between logo and text
         logo_text_layout.addSpacing(6)
-        # Add '2000' next to RetroStream, increase its size
-        text_label = QLabel("<span style='color:#00ccff;font-size:56px;font-family:VT323;'>RetroStream <span style='color:#7CFC98;font-size:46px;'>2000</span></span>")
-        text_label.setStyleSheet("padding-left: 0px;")
-        logo_text_layout.addWidget(text_label)
+        # --- RETRO TITLE AS QPIXMAP ---
+        # Render RetroStream 2000 with VT323 font to a pixmap for crisp retro look
+        title_text = "RetroStream 2000"
+        font_size = 38  # Smaller size
+        if families:
+            retro_font = QFont(families[0], font_size, QFont.Bold)
+        else:
+            retro_font = QFont("Courier New", font_size, QFont.Bold)
+        # Calculate text size
+        temp_label = QLabel()
+        temp_label.setFont(retro_font)
+        metrics = temp_label.fontMetrics()
+        text_width = metrics.width(title_text)
+        text_height = metrics.height()
+        pixmap = QPixmap(text_width + 12, text_height + 12)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setFont(retro_font)
+        # Draw shadow for retro effect
+        painter.setPen(QColor("#222"))
+        for dx, dy in [(2,2),(1,1)]:
+            painter.drawText(6+dx, text_height+dy, title_text)
+        # Draw main text
+        painter.setPen(QColor("#00ccff"))
+        painter.drawText(6, text_height, "RetroStream ")
+        painter.setPen(QColor("#7CFC98"))
+        painter.drawText(6 + metrics.width("RetroStream "), text_height, "2000")
+        painter.end()
+        title_label = QLabel()
+        title_label.setPixmap(pixmap)
+        logo_text_layout.addWidget(title_label)
         logo_text_layout.setAlignment(Qt.AlignCenter)
         main_layout.addLayout(logo_text_layout)
         main_layout.addSpacing(2)  # Small gap after title
 
-        # Badge label - just below title, slightly increased size
-        badge_label = QLabel("<span style='color:#ff6b00;font-size:16px;font-family:VT323;'>Made with ❤️ with touch of the 90s</span>")
+        # --- RETRO TAGLINE (PLAIN TEXT, VT323 FONT) ---
+        badge_label = QLabel("Made with  with touch of the 90s")
         badge_label.setAlignment(Qt.AlignCenter)
+        badge_label.setFont(QFont(families[0], 18) if families else QFont("Courier New", 18))
+        badge_label.setStyleSheet("color:#ff6b00;font-family:'VT323',monospace;")
         main_layout.addWidget(badge_label)
         main_layout.addSpacing(6)  # Small gap after badge
 
