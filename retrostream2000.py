@@ -727,6 +727,7 @@ class Local2StreamGUI(QWidget):
             retro_font = QFont(families[0], 13)
             QApplication.setFont(retro_font)
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(12, 0, 12, 12)  # Reduce top margin to 0
 
         # --- SPINNING VINYL/CASSETTE ANIMATION (hidden by default) ---
         self.spinner_label = QLabel()
@@ -786,6 +787,7 @@ class Local2StreamGUI(QWidget):
 
         # --- RETRO TAGLINE (ICON + TEXT + EMOJI, VT323 FONT) ---
         badge_layout = QHBoxLayout()
+        badge_layout.setSpacing(2)  # Reduce spacing between widgets in badge_layout
         badge_layout.addStretch(1)  # Left stretch for centering
         # Add 3.png icon before the badge label
         badge_icon_label = QLabel()
@@ -794,7 +796,7 @@ class Local2StreamGUI(QWidget):
             badge_icon_label.setPixmap(badge_icon_pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         badge_layout.addWidget(badge_icon_label)
         # Add spacing between icon and text
-        badge_layout.addSpacing(8)
+        badge_layout.addSpacing(4)  # Reduce spacing between icon and text
         badge_label = QLabel("Made with ❤️ with touch of the 90s")
         badge_label.setFont(QFont(families[0], 18) if families else QFont("Courier New", 18))
         badge_label.setStyleSheet("color:#ff6b00;font-family:'VT323',monospace;")
@@ -802,7 +804,8 @@ class Local2StreamGUI(QWidget):
         badge_layout.addWidget(badge_label)
         badge_layout.addStretch(1)  # Right stretch for centering
         main_layout.addLayout(badge_layout)
-        main_layout.addSpacing(6)  # Small gap after badge
+        # Reduce vertical gap after badge
+        main_layout.addSpacing(2)
 
         # Music Directory Group (Retro Cassette Deck Style)
         dir_group = QGroupBox("Music Directory (Cassette Deck)")
@@ -911,7 +914,7 @@ class Local2StreamGUI(QWidget):
         self.log_area = DOSTerminal()
         self.log_area.setReadOnly(True)
         log_layout.addWidget(self.log_area, stretch=1)
-        main_layout.addLayout(log_layout)
+        main_layout.addLayout(log_layout, 10)
 
         # Status Bar (remove icon)
         self.status_bar = RetroStatusBar()
@@ -1121,11 +1124,12 @@ class DOSTerminal(QPlainTextEdit):
                 color: #00FF00;
                 border: 2px solid #00FF00;
                 border-radius: 0px;
-                padding: 8px;
+                padding: 2px 8px 2px 8px;
                 selection-background-color: #00FF00;
                 selection-color: #000000;
             }
         """)
+        self.setViewportMargins(0, 0, 0, 0)
         self.setup_ascii_header()
         
     def setup_ascii_header(self):

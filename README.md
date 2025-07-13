@@ -39,8 +39,8 @@ RetroStream 2000 is a Y2K-themed music transfer application that bridges local m
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/cipherex/retromusic2000.git
-cd retromusic2000
+git clone https://github.com/Cipherex/RetroStream2000
+cd RetroStream2000
 ```
 
 ### Step 2: Install Dependencies
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 
 ### Step 1: Launch RetroStream 2000
 ```bash
-python retrosteam2000.py
+python retrostream2000.py
 ```
 
 ### Step 2: Configure Your Setup
