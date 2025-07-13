@@ -562,6 +562,15 @@ class Local2StreamGUI(QWidget):
         self.init_ui()
         self.spotify_config = None
         self.apply_retro_stylesheet()
+        # Set retro custom cursor using 7.png
+        retro_cursor_path = os.path.join(os.path.dirname(__file__), 'icons', '7.png')
+        if os.path.exists(retro_cursor_path):
+            from PyQt5.QtGui import QCursor
+            retro_cursor_pixmap = QPixmap(retro_cursor_path)
+            if not retro_cursor_pixmap.isNull():
+                # Scale down the cursor to 1/24 of its original size
+                tiny_cursor = retro_cursor_pixmap.scaled(retro_cursor_pixmap.width() // 16, retro_cursor_pixmap.height() // 16)
+                self.setCursor(QCursor(tiny_cursor, 0, 0))
         # Always open maximized
         self.showMaximized()
 
