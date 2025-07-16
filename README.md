@@ -6,6 +6,12 @@
 
 RetroStream 2000 is a Y2K-themed music transfer application that bridges local music collections with modern streaming platforms. The application combines nostalgic desktop software aesthetics with contemporary functionality.
 
+## 📺 Video Guide
+
+![App Thumbnail](images/main.jpg)
+
+Watch the complete setup and usage guide here: [📹 YouTube Guide](https://youtu.be/j8KCTMpYc0Q)
+
 ### Core Features
 - *🎧 Smart Music Transfer*: Automatically transfers local music library to Spotify playlists
 - *🧠 AI-Powered Matching*: Uses advanced fuzzy matching algorithms to find corresponding tracks
